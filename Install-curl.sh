@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Make sure cloud-init template folder exists
-sudo mkdir -p /var/lib/vz/template/cloud-init
+mkdir -p /var/lib/vz/template/cloud-init
 
 # Download script to home directory
 cd ~/
