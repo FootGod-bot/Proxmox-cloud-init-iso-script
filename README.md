@@ -15,4 +15,5 @@ Select your .img by typing the number next to it, and type the id of the vm you 
 It will then ask what storage to use. Chose what is best for you.
 It will then ask how much storage you want the vm to have. Fill in with how much you need.
 Next it will ask the username, password, ip, and cider. Leave blank for default. This can be changed later in the cloud-iit tab.
-Then the script will be finished and you will need to update your vm before use. This may take a few hours.
+Then the script will be finished and you will need to update your vm before use. This may take a few hours. 
+# Video Tutorial Coming soon!
