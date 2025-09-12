@@ -107,7 +107,7 @@ qm set "$VMID" --boot c --bootdisk scsi0
 echo
 echo "Cloud-Init configuration (leave blank for defaults)"
 read -p "Username [default: user]: " CI_USER
-read -p "Password [default: pass]: " CI_PASS
+read -s -p "Password [default: pass]: " CI_PASS
 read -p "IP address (blank for DHCP): " CI_IP
 read -p "CIDR (default 24 if IP given): " CI_CIDR
 
