@@ -1,8 +1,27 @@
+Run `ls -la` to list files.
+```bash
+echo "Hello, world!"
+ls -la
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 # Step 1:
 Open proxmox shell and run:
-curl -L -o new_vm.sh https://raw.githubusercontent.com/FootGod-bot/Proxmox-cloud-init-iso-script/refs/heads/main/new_vm.sh
+bash <(curl -sL https://raw.githubusercontent.com/FootGod-bot/Proxmox-cloud-init-iso-script/refs/heads/main/Install-curl.sh)
+
 Or this if you dont have curl:
-wget -O new_vm.sh https://raw.githubusercontent.com/FootGod-bot/Proxmox-cloud-init-iso-script/refs/heads/main/new_vm.sh
+bash <(wget -qO- https://raw.githubusercontent.com/FootGod-bot/Proxmox-cloud-init-iso-script/refs/heads/main/Install-weget.sh)
 # Step 2:
 Create a new vm with no iso and no drive storage. These are configured later.
 Find a cloud image for your OS. Example: https://cloud-images.ubuntu.com/jammy/current/ for Ubuntu Server.
