@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Make sure cloud-init template folder exists
-sudo mkdir -p /var/lib/vz/template/cloud-init
+mkdir -p /var/lib/vz/template/cloud-init
 
 # Download script to home directory
 wget -O ~/new_vm.sh https://raw.githubusercontent.com/FootGod-bot/Proxmox-cloud-init-iso-script/refs/heads/main/new_vm.sh
