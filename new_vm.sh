@@ -28,9 +28,6 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-DEFAULT_USER=${DEFAULT_USER:-}
-DEFAULT_PASS=${DEFAULT_PASS:-}
-
 # -----------------------------
 # Folder with images
 # -----------------------------
@@ -133,39 +130,29 @@ fi
 qm set "$VMID" --boot c --bootdisk scsi0
 
 # -----------------------------
-# Cloud-Init interactive settings
+# Cloud-Init interactive settings (pre-fill from flags)
 # -----------------------------
 echo
 echo "Cloud-Init configuration (leave blank for defaults)"
 
 # Username
-if [ -z "$DEFAULT_USER" ]; then
-    read -p "Username [default: user(change with flag -user)]: " CI_USER
-    CI_USER=${CI_USER:-user}
-else
-    CI_USER="$DEFAULT_USER"
-    echo "Using preset username: $CI_USER"
-fi
+read -p "Username [default: ${DEFAULT_USER:-user}]: " CI_USER
+CI_USER=${CI_USER:-${DEFAULT_USER:-user}}
 
 # Password with confirmation
-if [ -z "$DEFAULT_PASS" ]; then
-    while true; do
-        read -s -p "Password [default: pass]: " CI_PASS
-        echo
-        read -s -p "Confirm password: " CI_PASS2
-        echo
-        CI_PASS=${CI_PASS:-pass}
-        CI_PASS2=${CI_PASS2:-$CI_PASS}
-        if [ "$CI_PASS" == "$CI_PASS2" ]; then
-            break
-        else
-            echo "Passwords do not match, try again."
-        fi
-    done
-else
-    CI_PASS="$DEFAULT_PASS"
-    echo "Using preset password."
-fi
+while true; do
+    read -s -p "Password [default: ${DEFAULT_PASS:-pass}]: " CI_PASS
+    echo
+    read -s -p "Confirm password: " CI_PASS2
+    echo
+    CI_PASS=${CI_PASS:-${DEFAULT_PASS:-pass}}
+    CI_PASS2=${CI_PASS2:-$CI_PASS}
+    if [ "$CI_PASS" == "$CI_PASS2" ]; then
+        break
+    else
+        echo "Passwords do not match, try again."
+    fi
+done
 
 # IP and CIDR
 read -p "IP address (blank for DHCP): " CI_IP
