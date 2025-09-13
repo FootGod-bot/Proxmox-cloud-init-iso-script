@@ -1,6 +1,8 @@
 #!/bin/bash
 
 # Make sure cloud-init template folder exists
+apt update
+apt install -y jq
 mkdir -p /var/lib/vz/template/cloud-init
 
 # Download script to home directory
