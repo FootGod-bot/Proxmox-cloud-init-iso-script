@@ -114,7 +114,7 @@ fi
 if [[ -n "${BUILTIN_ISOS[$SELECTED_ISO]}" ]]; then
     ISO_URL="${BUILTIN_ISOS[$SELECTED_ISO]}"
 else
-    CONFIG_FILE="$SELECTED_ISO/$SELECTED_ISO.config"
+    CONFIG_FILE="$SELECTED_ISO/$(basename "$SELECTED_ISO").config"
     if [[ ! -f "$CONFIG_FILE" ]]; then
         echo "Config file missing for user-added ISO. Exiting."
         exit 1
