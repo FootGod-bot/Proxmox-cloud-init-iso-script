@@ -20,20 +20,17 @@ DEFAULT_PASS="pass"
 # PARSE FLAGS
 # -----------------------------
 ACTION=""
-DOWNLOAD_URL=""
+URL=""
 while [[ $# -gt 0 ]]; do
     case "$1" in
         -add)
             ACTION="add"
-            shift
-            ;;
-        -rm)
-            ACTION="rm"
-            shift
-            ;;
-        -download)
-            DOWNLOAD_URL="$2"
+            URL="$2"
             shift 2
+            ;;
+        -remove)
+            ACTION="remove"
+            shift
             ;;
         *)
             shift
@@ -42,31 +39,38 @@ while [[ $# -gt 0 ]]; do
 done
 
 # -----------------------------
-# HANDLE ADD / REMOVE
+# HANDLE ADD
 # -----------------------------
 if [[ "$ACTION" == "add" ]]; then
-    read -p "Enter ISO name: " ISO_NAME
-    if [[ -z "$DOWNLOAD_URL" ]]; then
-        read -p "Enter download URL: " DOWNLOAD_URL
+    if [[ -z "$URL" ]]; then
+        echo "Error: must provide a URL with -add"
+        exit 1
     fi
+    read -p "Enter ISO name: " ISO_NAME
     TARGET_DIR="$ISO_FOLDER/$ISO_NAME"
     mkdir -p "$TARGET_DIR"
-    echo "$DOWNLOAD_URL" > "$TARGET_DIR/$ISO_NAME.config"
+    echo "$URL" > "$TARGET_DIR/$ISO_NAME.config"
     echo "ISO '$ISO_NAME' added successfully."
     exit 0
 fi
 
-if [[ "$ACTION" == "rm" ]]; then
-    # List user-added ISOs only (skip built-in)
-    mapfile -t USER_ISOS < <(ls "$ISO_FOLDER")
+# -----------------------------
+# HANDLE REMOVE
+# -----------------------------
+if [[ "$ACTION" == "remove" ]]; then
+    # Find all user-added ISOs with .config
+    mapfile -t USER_ISOS < <(find "$ISO_FOLDER" -type f -name "*.config" -printf "%f\n" | sed 's/\.config$//')
+
     if [ "${#USER_ISOS[@]}" -eq 0 ]; then
         echo "No user-added ISOs to remove."
         exit 0
     fi
-    echo "Available user-added ISOs to remove:"
+
+    echo "Available ISOs to remove:"
     for i in "${!USER_ISOS[@]}"; do
         echo "$((i+1)): ${USER_ISOS[$i]}"
     done
+
     read -p "Enter the number to remove: " REMOVE_NUM
     ISO_TO_REMOVE="${USER_ISOS[$((REMOVE_NUM-1))]}"
     rm -rf "$ISO_FOLDER/$ISO_TO_REMOVE"
@@ -88,8 +92,8 @@ for iso_name in "${!BUILTIN_ISOS[@]}"; do
     ((INDEX++))
 done
 
-# List user-added ISOs
-mapfile -t USER_ISOS < <(ls "$ISO_FOLDER")
+# List user-added ISOs (only .config ones)
+mapfile -t USER_ISOS < <(find "$ISO_FOLDER" -type f -name "*.config" -printf "%f\n" | sed 's/\.config$//')
 for iso_name in "${USER_ISOS[@]}"; do
     echo "$INDEX: $iso_name (custom)"
     ISO_MAP[$INDEX]="$ISO_FOLDER/$iso_name"
