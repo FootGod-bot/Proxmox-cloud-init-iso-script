@@ -20,16 +20,16 @@ DEFAULT_PASS="pass"
 # PARSE FLAGS
 # -----------------------------
 ACTION=""
-URL=""
+DOWNLOAD_URL=""
 while [[ $# -gt 0 ]]; do
     case "$1" in
         -add)
             ACTION="add"
-            URL="$2"
+            DOWNLOAD_URL="$2"
             shift 2
             ;;
-        -remove)
-            ACTION="remove"
+        -rm)
+            ACTION="rm"
             shift
             ;;
         *)
@@ -42,14 +42,19 @@ done
 # HANDLE ADD
 # -----------------------------
 if [[ "$ACTION" == "add" ]]; then
-    if [[ -z "$URL" ]]; then
-        echo "Error: must provide a URL with -add"
-        exit 1
+    if [[ -z "$DOWNLOAD_URL" ]]; then
+        read -p "Enter download URL: " DOWNLOAD_URL
     fi
     read -p "Enter ISO name: " ISO_NAME
-    TARGET_DIR="$ISO_FOLDER/$ISO_NAME"
-    mkdir -p "$TARGET_DIR"
-    echo "$URL" > "$TARGET_DIR/$ISO_NAME.config"
+    JSON_FILE="$ISO_FOLDER/$ISO_NAME.json"
+
+    cat > "$JSON_FILE" <<EOF
+{
+  "name": "$ISO_NAME",
+  "url": "$DOWNLOAD_URL"
+}
+EOF
+
     echo "ISO '$ISO_NAME' added successfully."
     exit 0
 fi
@@ -57,24 +62,21 @@ fi
 # -----------------------------
 # HANDLE REMOVE
 # -----------------------------
-if [[ "$ACTION" == "remove" ]]; then
-    # Find all user-added ISOs with .config
-    mapfile -t USER_ISOS < <(find "$ISO_FOLDER" -type f -name "*.config" -printf "%f\n" | sed 's/\.config$//')
-
-    if [ "${#USER_ISOS[@]}" -eq 0 ]; then
+if [[ "$ACTION" == "rm" ]]; then
+    mapfile -t USER_JSONS < <(ls "$ISO_FOLDER"/*.json 2>/dev/null)
+    if [ "${#USER_JSONS[@]}" -eq 0 ]; then
         echo "No user-added ISOs to remove."
         exit 0
     fi
-
-    echo "Available ISOs to remove:"
-    for i in "${!USER_ISOS[@]}"; do
-        echo "$((i+1)): ${USER_ISOS[$i]}"
+    echo "Available user-added ISOs to remove:"
+    for i in "${!USER_JSONS[@]}"; do
+        ISO_NAME=$(jq -r .name "${USER_JSONS[$i]}")
+        echo "$((i+1)): $ISO_NAME"
     done
-
     read -p "Enter the number to remove: " REMOVE_NUM
-    ISO_TO_REMOVE="${USER_ISOS[$((REMOVE_NUM-1))]}"
-    rm -rf "$ISO_FOLDER/$ISO_TO_REMOVE"
-    echo "ISO '$ISO_TO_REMOVE' removed successfully."
+    FILE_TO_REMOVE="${USER_JSONS[$((REMOVE_NUM-1))]}"
+    rm -f "$FILE_TO_REMOVE"
+    echo "ISO removed successfully."
     exit 0
 fi
 
@@ -84,19 +86,24 @@ fi
 echo "Available ISOs:"
 INDEX=1
 declare -A ISO_MAP
+declare -A URL_MAP
 
-# List built-in defaults
+# Built-ins
 for iso_name in "${!BUILTIN_ISOS[@]}"; do
     echo "$INDEX: $iso_name (built-in)"
     ISO_MAP[$INDEX]="$iso_name"
+    URL_MAP[$INDEX]="${BUILTIN_ISOS[$iso_name]}"
     ((INDEX++))
 done
 
-# List user-added ISOs (only .config ones)
-mapfile -t USER_ISOS < <(find "$ISO_FOLDER" -type f -name "*.config" -printf "%f\n" | sed 's/\.config$//')
-for iso_name in "${USER_ISOS[@]}"; do
-    echo "$INDEX: $iso_name (custom)"
-    ISO_MAP[$INDEX]="$ISO_FOLDER/$iso_name"
+# User-added
+mapfile -t USER_JSONS < <(ls "$ISO_FOLDER"/*.json 2>/dev/null)
+for json_file in "${USER_JSONS[@]}"; do
+    ISO_NAME=$(jq -r .name "$json_file")
+    ISO_URL=$(jq -r .url "$json_file")
+    echo "$INDEX: $ISO_NAME (custom)"
+    ISO_MAP[$INDEX]="$ISO_NAME"
+    URL_MAP[$INDEX]="$ISO_URL"
     ((INDEX++))
 done
 
@@ -104,29 +111,19 @@ done
 # SELECT ISO
 # -----------------------------
 read -p "Enter the number of the ISO to use: " ISO_NUM
-SELECTED_ISO="${ISO_MAP[$ISO_NUM]}"
-if [[ -z "$SELECTED_ISO" ]]; then
+ISO_NAME="${ISO_MAP[$ISO_NUM]}"
+ISO_URL="${URL_MAP[$ISO_NUM]}"
+
+if [[ -z "$ISO_NAME" || -z "$ISO_URL" ]]; then
     echo "Invalid selection. Exiting."
     exit 1
-fi
-
-# Determine URL
-if [[ -n "${BUILTIN_ISOS[$SELECTED_ISO]}" ]]; then
-    ISO_URL="${BUILTIN_ISOS[$SELECTED_ISO]}"
-else
-    CONFIG_FILE="$SELECTED_ISO/$(basename "$SELECTED_ISO").config"
-    if [[ ! -f "$CONFIG_FILE" ]]; then
-        echo "Config file missing for user-added ISO. Exiting."
-        exit 1
-    fi
-    ISO_URL=$(cat "$CONFIG_FILE")
 fi
 
 # -----------------------------
 # DOWNLOAD ISO TEMPORARILY
 # -----------------------------
 TMP_ISO=$(mktemp)
-echo "Downloading ISO '$SELECTED_ISO'..."
+echo "Downloading ISO '$ISO_NAME'..."
 wget -O "$TMP_ISO" "$ISO_URL"
 if [[ $? -ne 0 ]]; then
     echo "Download failed. Exiting."
