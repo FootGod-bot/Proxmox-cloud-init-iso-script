@@ -7,7 +7,7 @@
 # -----------------------------
 # Parse optional flags
 # -----------------------------
-ISO_FOLDER="/var/lib/vz/template/iso"
+ISO_FOLDER="/var/lib/vz/template/cloud-init"
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --user)
