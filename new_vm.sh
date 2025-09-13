@@ -1,25 +1,38 @@
 #!/bin/bash
 
 # -----------------------------
-# Proxmox VM ISO Import + Cloud-Init Setup
+# CONFIGURATION
 # -----------------------------
 
-# -----------------------------
-# Parse optional flags
-# -----------------------------
 ISO_FOLDER="/var/lib/vz/template/cloud-init"
+mkdir -p "$ISO_FOLDER"
+
+# Built-in defaults (cannot be removed)
+declare -A BUILTIN_ISOS
+BUILTIN_ISOS["Ubuntu 24.04 Cloud"]="https://cloud-images.ubuntu.com/releases/24.04/release/ubuntu-24.04-server-cloudimg-amd64.img"
+BUILTIN_ISOS["Ubuntu 22.04 Cloud"]="https://cloud-images.ubuntu.com/releases/22.04/release/ubuntu-22.04-server-cloudimg-amd64.img"
+
+# Default cloud-init credentials
+DEFAULT_USER="user"
+DEFAULT_PASS="pass"
+
+# -----------------------------
+# PARSE FLAGS
+# -----------------------------
+ACTION=""
+DOWNLOAD_URL=""
 while [[ $# -gt 0 ]]; do
     case "$1" in
-        --user)
-            DEFAULT_USER="$2"
-            shift 2
+        -add)
+            ACTION="add"
+            shift
             ;;
-        --pass)
-            DEFAULT_PASS="$2"
-            shift 2
+        -rm)
+            ACTION="rm"
+            shift
             ;;
-        --folder)
-            ISO_FOLDER="$2"
+        -download)
+            DOWNLOAD_URL="$2"
             shift 2
             ;;
         *)
@@ -29,144 +42,172 @@ while [[ $# -gt 0 ]]; do
 done
 
 # -----------------------------
-# Folder with images
+# HANDLE ADD / REMOVE
 # -----------------------------
-IMG_FOLDER="$ISO_FOLDER"
-
-# List available ISOs
-echo "Available images in $IMG_FOLDER:"
-mapfile -t IMG_LIST < <(ls "$IMG_FOLDER" 2>/dev/null)
-if [ "${#IMG_LIST[@]}" -eq 0 ]; then
-    echo "No ISOs found in $IMG_FOLDER. Exiting."
-    exit 1
+if [[ "$ACTION" == "add" ]]; then
+    read -p "Enter ISO name: " ISO_NAME
+    if [[ -z "$DOWNLOAD_URL" ]]; then
+        read -p "Enter download URL: " DOWNLOAD_URL
+    fi
+    TARGET_DIR="$ISO_FOLDER/$ISO_NAME"
+    mkdir -p "$TARGET_DIR"
+    echo "$DOWNLOAD_URL" > "$TARGET_DIR/$ISO_NAME.config"
+    echo "ISO '$ISO_NAME' added successfully."
+    exit 0
 fi
-for i in "${!IMG_LIST[@]}"; do
-    echo "$((i+1)): ${IMG_LIST[$i]}"
-done
-echo
 
-# Select ISO
-read -p "Enter the number of the image you want to use: " IMG_NUM
-if ! [[ "$IMG_NUM" =~ ^[0-9]+$ ]] || [ "$IMG_NUM" -lt 1 ] || [ "$IMG_NUM" -gt "${#IMG_LIST[@]}" ]; then
+if [[ "$ACTION" == "rm" ]]; then
+    # List user-added ISOs only (skip built-in)
+    mapfile -t USER_ISOS < <(ls "$ISO_FOLDER")
+    if [ "${#USER_ISOS[@]}" -eq 0 ]; then
+        echo "No user-added ISOs to remove."
+        exit 0
+    fi
+    echo "Available user-added ISOs to remove:"
+    for i in "${!USER_ISOS[@]}"; do
+        echo "$((i+1)): ${USER_ISOS[$i]}"
+    done
+    read -p "Enter the number to remove: " REMOVE_NUM
+    ISO_TO_REMOVE="${USER_ISOS[$((REMOVE_NUM-1))]}"
+    rm -rf "$ISO_FOLDER/$ISO_TO_REMOVE"
+    echo "ISO '$ISO_TO_REMOVE' removed successfully."
+    exit 0
+fi
+
+# -----------------------------
+# BUILD ISO SELECTION LIST
+# -----------------------------
+echo "Available ISOs:"
+INDEX=1
+declare -A ISO_MAP
+
+# List built-in defaults
+for iso_name in "${!BUILTIN_ISOS[@]}"; do
+    echo "$INDEX: $iso_name (built-in)"
+    ISO_MAP[$INDEX]="$iso_name"
+    ((INDEX++))
+done
+
+# List user-added ISOs
+mapfile -t USER_ISOS < <(ls "$ISO_FOLDER")
+for iso_name in "${USER_ISOS[@]}"; do
+    echo "$INDEX: $iso_name (custom)"
+    ISO_MAP[$INDEX]="$ISO_FOLDER/$iso_name"
+    ((INDEX++))
+done
+
+# -----------------------------
+# SELECT ISO
+# -----------------------------
+read -p "Enter the number of the ISO to use: " ISO_NUM
+SELECTED_ISO="${ISO_MAP[$ISO_NUM]}"
+if [[ -z "$SELECTED_ISO" ]]; then
     echo "Invalid selection. Exiting."
     exit 1
 fi
-IMG_FILE="${IMG_LIST[$((IMG_NUM-1))]}"
-IMG_PATH="$IMG_FOLDER/$IMG_FILE"
 
-# Ask for VMID
+# Determine URL
+if [[ -n "${BUILTIN_ISOS[$SELECTED_ISO]}" ]]; then
+    ISO_URL="${BUILTIN_ISOS[$SELECTED_ISO]}"
+else
+    CONFIG_FILE="$SELECTED_ISO/$SELECTED_ISO.config"
+    if [[ ! -f "$CONFIG_FILE" ]]; then
+        echo "Config file missing for user-added ISO. Exiting."
+        exit 1
+    fi
+    ISO_URL=$(cat "$CONFIG_FILE")
+fi
+
+# -----------------------------
+# DOWNLOAD ISO TEMPORARILY
+# -----------------------------
+TMP_ISO=$(mktemp)
+echo "Downloading ISO '$SELECTED_ISO'..."
+wget -O "$TMP_ISO" "$ISO_URL"
+if [[ $? -ne 0 ]]; then
+    echo "Download failed. Exiting."
+    exit 1
+fi
+
+# -----------------------------
+# VM IMPORT + CLOUD-INIT
+# -----------------------------
+echo
 read -p "Enter the VMID of the VM you want to attach this image to: " VMID
 if ! [[ "$VMID" =~ ^[0-9]+$ ]]; then
     echo "Invalid VMID. Exiting."
+    rm -f "$TMP_ISO"
     exit 1
 fi
 
-# List block storage options
-echo
+# List storage options
 echo "Available block storage:"
-mapfile -t STORAGE_LIST < <(pvesm status | awk '$2=="lvm" || $2=="lvmthin" || $2=="zfs" {print $1" "$2}')
+mapfile -t STORAGE_LIST < <(pvesm status | awk '$2=="lvm" || $2=="lvmthin" || $2=="zfs" {print $1}')
 if [ "${#STORAGE_LIST[@]}" -eq 0 ]; then
     echo "No supported storage found. Exiting."
+    rm -f "$TMP_ISO"
     exit 1
 fi
 for i in "${!STORAGE_LIST[@]}"; do
-    NAME=$(echo "${STORAGE_LIST[$i]}" | awk '{print $1}')
-    TYPE=$(echo "${STORAGE_LIST[$i]}" | awk '{print $2}')
-    echo "$((i+1)): $NAME ($TYPE)"
+    echo "$((i+1)): ${STORAGE_LIST[$i]}"
 done
-echo
-
-# Select storage
 read -p "Enter the number of the storage to import to: " STORAGE_NUM
-if ! [[ "$STORAGE_NUM" =~ ^[0-9]+$ ]] || [ "$STORAGE_NUM" -lt 1 ] || [ "$STORAGE_NUM" -gt "${#STORAGE_LIST[@]}" ]; then
-    echo "Invalid selection. Exiting."
-    exit 1
-fi
-STORAGE=$(echo "${STORAGE_LIST[$((STORAGE_NUM-1))]}" | awk '{print $1}')
+STORAGE="${STORAGE_LIST[$((STORAGE_NUM-1))]}"
 
 # Import disk
 echo "Importing disk..."
-qm importdisk "$VMID" "$IMG_PATH" "$STORAGE"
-if [ $? -ne 0 ]; then
-    echo "Import failed. Exiting."
-    exit 1
-fi
+qm importdisk "$VMID" "$TMP_ISO" "$STORAGE"
 
-# Detect imported disk name automatically
-DISK_NAME=$(qm config "$VMID" | awk '/unused/ {print $1}' | head -n1)
-if [ -z "$DISK_NAME" ]; then
-    echo "Could not detect imported disk. Exiting."
-    exit 1
-fi
-
-# Attach disk as SCSI VirtIO
-echo "Attaching disk $DISK_NAME..."
+# Attach disk
 qm set "$VMID" --scsihw virtio-scsi-pci --scsi0 "${STORAGE}:vm-${VMID}-disk-0"
-if [ $? -ne 0 ]; then
-    echo "Failed to attach disk. Exiting."
-    exit 1
-fi
 
-# Ask for disk resize
-read -p "Enter new disk size (example: 20G or 20): " RAW_DISK_SIZE
+# Disk resize
+read -p "Enter new disk size (example 20G): " RAW_DISK_SIZE
 DISK_SIZE=$(echo "$RAW_DISK_SIZE" | sed -E 's/([0-9]+)([gG])?/\1G/')
-echo "Resizing disk to $DISK_SIZE..."
 qm resize "$VMID" scsi0 "$DISK_SIZE"
-if [ $? -ne 0 ]; then
-    echo "Disk resize failed. Exiting."
-    exit 1
-fi
 
-# Add Cloud-Init drive if missing
+# Cloud-init drive
 if ! qm config "$VMID" | grep -q cloudinit; then
-    echo "Creating Cloud-Init disk..."
     qm set "$VMID" --ide2 "${STORAGE}:cloudinit"
-    if [ $? -ne 0 ]; then
-        echo "Failed to create Cloud-Init disk. Exiting."
-        exit 1
-    fi
 fi
-
 qm set "$VMID" --boot c --bootdisk scsi0
 
-# -----------------------------
-# Cloud-Init interactive settings (pre-fill from flags)
-# -----------------------------
-echo
-echo "Cloud-Init configuration (leave blank for defaults)"
-
-# Username
-read -p "Username [default: ${DEFAULT_USER:-user}]: " CI_USER
-CI_USER=${CI_USER:-${DEFAULT_USER:-user}}
-
-# Password with confirmation
+# Cloud-init settings
+CI_USER="$DEFAULT_USER"
+CI_PASS="$DEFAULT_PASS"
+read -p "Username [default: $CI_USER]: " INPUT_USER
+CI_USER=${INPUT_USER:-$CI_USER}
 while true; do
-    read -s -p "Password [default: ${DEFAULT_PASS:-pass}]: " CI_PASS
+    read -s -p "Password [default: $CI_PASS]: " INPUT_PASS
     echo
-    read -s -p "Confirm password: " CI_PASS2
+    read -s -p "Confirm password: " INPUT_PASS2
     echo
-    CI_PASS=${CI_PASS:-${DEFAULT_PASS:-pass}}
-    CI_PASS2=${CI_PASS2:-$CI_PASS}
-    if [ "$CI_PASS" == "$CI_PASS2" ]; then
+    INPUT_PASS=${INPUT_PASS:-$CI_PASS}
+    INPUT_PASS2=${INPUT_PASS2:-$INPUT_PASS}
+    if [[ "$INPUT_PASS" == "$INPUT_PASS2" ]]; then
+        CI_PASS="$INPUT_PASS"
         break
     else
         echo "Passwords do not match, try again."
     fi
 done
 
-# IP and CIDR
-read -p "IP address (blank for DHCP): " CI_IP
+read -p "IP address (leave blank for DHCP): " CI_IP
 read -p "CIDR (default 24 if IP given): " CI_CIDR
-
-if [ -z "$CI_IP" ]; then
+CI_CIDR=${CI_CIDR:-24}
+if [[ -z "$CI_IP" ]]; then
     qm set "$VMID" --ipconfig0 "ip=dhcp"
 else
-    CI_CIDR=${CI_CIDR:-24}
     qm set "$VMID" --ipconfig0 "ip=${CI_IP}/${CI_CIDR}"
 fi
 
-# Apply Cloud-Init credentials
 qm set "$VMID" --ciuser "$CI_USER" --cipassword "$CI_PASS"
+
+# -----------------------------
+# CLEAN UP
+# -----------------------------
+rm -f "$TMP_ISO"
+echo "Temporary ISO removed."
 
 echo "----------------------------------------"
 echo "Done! VM $VMID is ready."
