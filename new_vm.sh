@@ -47,6 +47,8 @@ if [[ "$ACTION" == "add" ]]; then
     fi
     read -p "Enter ISO name: " ISO_NAME
     JSON_FILE="$ISO_FOLDER/$ISO_NAME.json"
+    ISO_DIR="$ISO_FOLDER/$ISO_NAME"
+    mkdir -p "$ISO_DIR"
 
     cat > "$JSON_FILE" <<EOF
 {
@@ -75,8 +77,10 @@ if [[ "$ACTION" == "rm" ]]; then
     done
     read -p "Enter the number to remove: " REMOVE_NUM
     FILE_TO_REMOVE="${USER_JSONS[$((REMOVE_NUM-1))]}"
+    ISO_NAME=$(jq -r .name "$FILE_TO_REMOVE")
     rm -f "$FILE_TO_REMOVE"
-    echo "ISO removed successfully."
+    rm -rf "$ISO_FOLDER/$ISO_NAME"
+    echo "ISO '$ISO_NAME' removed successfully."
     exit 0
 fi
 
@@ -120,13 +124,27 @@ if [[ -z "$ISO_NAME" || -z "$ISO_URL" ]]; then
 fi
 
 # -----------------------------
-# DOWNLOAD ISO TEMPORARILY
+# DOWNLOAD ISO TEMPORARILY (in ISO folder)
 # -----------------------------
-TMP_ISO=$(mktemp)
-echo "Downloading ISO '$ISO_NAME'..."
+ISO_DIR="$ISO_FOLDER/$ISO_NAME"
+mkdir -p "$ISO_DIR"
+TMP_ISO="$ISO_DIR/${ISO_NAME}_tmp.iso"
+
+cleanup() {
+    if [[ -f "$TMP_ISO" ]]; then
+        echo
+        echo "Cleaning up incomplete ISO..."
+        rm -f "$TMP_ISO"
+    fi
+    exit 1
+}
+trap cleanup INT TERM
+
+echo "Downloading ISO '$ISO_NAME' to $TMP_ISO..."
 wget -O "$TMP_ISO" "$ISO_URL"
 if [[ $? -ne 0 ]]; then
-    echo "Download failed. Exiting."
+    echo "Download failed. Cleaning up..."
+    rm -f "$TMP_ISO"
     exit 1
 fi
 
