@@ -9,7 +9,7 @@ mkdir -p "$ISO_FOLDER"
 
 # Built-in defaults (cannot be removed)
 declare -A BUILTIN_ISOS
-BUILTIN_ISOS["Ubuntu 24.04 Cloud"]="https://cloud-images.ubuntu.com/jammy/current/jammy-server-cloudimg-amd64.img"
+BUILTIN_ISOS["Ubuntu 24.04 Cloud"]="https://cloud-images.ubuntu.com/noble/current/noble-server-cloudimg-amd64.img"
 BUILTIN_ISOS["Debian 12 Cloud"]="https://cloud.debian.org/images/cloud/bookworm/latest/debian-12-genericcloud-amd64.qcow2"
 
 # Default cloud-init credentials
