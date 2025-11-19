@@ -13,7 +13,7 @@ BUILTIN_ISOS["Ubuntu 24.04 Cloud"]="https://cloud-images.ubuntu.com/noble/curren
 BUILTIN_ISOS["Debian 12 Cloud"]="https://cloud.debian.org/images/cloud/bookworm/latest/debian-12-genericcloud-amd64.qcow2"
 
 # Default cloud-init credentials
-DEFAULT_USER="user"
+DEFAULT_USER="root"
 DEFAULT_PASS="pass"
 
 # -----------------------------
