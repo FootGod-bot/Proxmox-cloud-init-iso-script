@@ -10,4 +10,4 @@ chmod +x ~/vm.sh
 
 echo "Run ./vm.sh to add a cloud init vm"
 echo "Running script"
-./vm.sh
+~/vm.sh
