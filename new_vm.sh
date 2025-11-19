@@ -184,6 +184,12 @@ STORAGE="${STORAGE_LIST[$((STORAGE_NUM-1))]}"
 echo "Importing disk..."
 qm importdisk "$VMID" "$ISO_FILE" "$STORAGE"
 
+# Delete ISO after import
+if [[ -f "$ISO_FILE" ]]; then
+    echo "Cleaning up ISO file $ISO_FILE..."
+    rm -f "$ISO_FILE"
+fi
+
 # Attach disk
 qm set "$VMID" --scsihw virtio-scsi-pci --scsi0 "${STORAGE}:vm-${VMID}-disk-0"
 
@@ -198,11 +204,15 @@ if ! qm config "$VMID" | grep -q cloudinit; then
 fi
 qm set "$VMID" --boot c --bootdisk scsi0
 
-# Cloud-init settings
+# -----------------------------
+# CLOUD-INIT CREDENTIALS
+# -----------------------------
+
 CI_USER="$DEFAULT_USER"
 CI_PASS="$DEFAULT_PASS"
 read -p "Username [default: $CI_USER]: " INPUT_USER
 CI_USER=${INPUT_USER:-$CI_USER}
+
 while true; do
     read -s -p "Password [default: $CI_PASS]: " INPUT_PASS
     echo
@@ -218,13 +228,27 @@ while true; do
     fi
 done
 
+# -----------------------------
+# CLOUD-INIT IP CONFIGURATION
+# -----------------------------
+
 read -p "IP address (leave blank for DHCP): " CI_IP
-read -p "CIDR (default 24 if IP given): " CI_CIDR
-CI_CIDR=${CI_CIDR:-24}
-if [[ -z "$CI_IP" ]]; then
-    qm set "$VMID" --ipconfig0 "ip=dhcp"
+if [[ -n "$CI_IP" ]]; then
+    read -p "CIDR (default 24): " CI_CIDR
+    CI_CIDR=${CI_CIDR:-24}
+
+    # Get host's default gateway
+    HOST_GW=$(ip route | awk '/default/ {print $3; exit}')
+    if [[ -z "$HOST_GW" ]]; then
+        echo "Could not detect host gateway. Exiting."
+        exit 1
+    fi
+
+    echo "Setting static IP $CI_IP/$CI_CIDR with gateway $HOST_GW..."
+    qm set "$VMID" --ipconfig0 "ip=${CI_IP}/${CI_CIDR},gw=${HOST_GW}"
 else
-    qm set "$VMID" --ipconfig0 "ip=${CI_IP}/${CI_CIDR}"
+    echo "Using DHCP..."
+    qm set "$VMID" --ipconfig0 "ip=dhcp"
 fi
 
 qm set "$VMID" --ciuser "$CI_USER" --cipassword "$CI_PASS"
