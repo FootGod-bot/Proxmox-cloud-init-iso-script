@@ -8,6 +8,6 @@ mkdir -p /var/lib/vz/template/cloud-init
 echo 'bash <(wget -qO- https://raw.githubusercontent.com/FootGod-bot/Proxmox-cloud-init-iso-script/refs/heads/main/new_vm.sh)' > /usr/local/bin/vm.sh
 chmod +x /usr/local/bin/vm.sh
 
-echo "Run ./vm.sh to add a cloud init vm"
+echo "Run vm.sh to add a cloud init vm"
 echo "Running script"
-~/vm.sh
+vm.sh
