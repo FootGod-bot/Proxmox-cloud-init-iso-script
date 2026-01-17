@@ -128,7 +128,7 @@ if [[ -n "$CI_IP" ]]; then
     HOST_GW=$(ip route | awk '/default/ {print $3; exit}')
 fi
 
-read -p "Run OS package update after first boot? [y/N]: " UPDATE_PACKAGES
+
 UPDATE_PACKAGES=${UPDATE_PACKAGES:-n}
 
 ISO_DIR="$ISO_FOLDER/$ISO_NAME"
